@@ -1,6 +1,8 @@
 #include <cstring>
 #include <cstdint>
 
+//https://create.stephan-brumme.com/crc32/#crc32Lookup
+//https://stackoverflow.com/questions/28675727/using-crc32-algorithm-to-hash-string-at-compile-time
 
 // Generate CRC lookup table
 template <unsigned c, int k = 8>
