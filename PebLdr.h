@@ -7,14 +7,6 @@
 #include "crc32.h"
 #include <stdio.h>
 
-
-// http://lolengine.net/blog/2011/12/20/cpp-constant-string-hash
-//#define H1(s,i,x)   (x*42069u+(BYTE)s[(i)<strlen(s)?strlen(s)-1-(i):strlen(s)])
-//#define H4(s,i,x)   H1(s,i,H1(s,i+1,H1(s,i+2,H1(s,i+3,x))))
-//#define H16(s,i,x)  H4(s,i,H4(s,i+4,H4(s,i+8,H4(s,i+12,x))))
-//#define H64(s,i,x)  H16(s,i,H16(s,i+16,H16(s,i+32,H16(s,i+48,x))))
-//#define H256(s,i,x) H64(s,i,H64(s,i+64,H64(s,i+128,H64(s,i+192,x))))
-//#define HASH(s)    ((DWORD)(H256(s,0,0)^(H256(s,0,0)>>16)))
 #define HASH(s)	WSID(s)
 
 HMODULE getK32();
@@ -35,11 +27,11 @@ typedef struct _peb_ldr {
 			return FALSE;
 
 		IMAGE_EXPORT_DIRECTORY* _export = (IMAGE_EXPORT_DIRECTORY*)(_nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress + (size_t)this->base);
-		PDWORD funcTbl = (PDWORD)((DWORD)_export->AddressOfFunctions + (size_t)this->base);
-		void* nameTbl = (void*)((DWORD)_export->AddressOfNames + (size_t)this->base);
-		PWORD ordTbl = (PWORD)((DWORD)_export->AddressOfNameOrdinals + (size_t)this->base);
+		PDWORD funcTbl = (PDWORD)(_export->AddressOfFunctions + (size_t)this->base);
+		void* nameTbl = (void*)(_export->AddressOfNames + (size_t)this->base);
+		PWORD ordTbl = (PWORD)(_export->AddressOfNameOrdinals + (size_t)this->base);
 		this->p_eat_ptrtbl = funcTbl;
-		this->p_eat_strtbl = (void*)nameTbl;
+		this->p_eat_strtbl = nameTbl;
 		this->p_eat_ordtbl = ordTbl;
 		this->num_exp = _export->NumberOfFunctions;
 		return TRUE;
@@ -81,10 +73,6 @@ typedef struct _peb_ldr {
 		for (int i = 0; i < this->num_exp; i++) {
 			DWORD name_offset = *(DWORD*)string_tbl_iter;
 			char* namePtr = ((char*)this->base + name_offset);
-
-			//DWORD fn_va = this->p_eat_ptrtbl[this->p_eat_ordtbl[i]];
-			//void* fn = (void*)((size_t)this->base + (DWORD)fn_va);
-			//printf("%p\t%s : %p - %x : str %x  fn %x\n", this->base, namePtr, fn, this->p_eat_ordtbl[i], name_offset, fn_va);
 			auto x = HASH(namePtr);
 			if (HASH(namePtr) == hash) {
 				DWORD fn_va = this->p_eat_ptrtbl[this->p_eat_ordtbl[i]];
