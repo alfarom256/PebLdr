@@ -26,5 +26,12 @@ int main() {
 	
 	// Call the hooked MessageBoxA
 	MessageBoxA(NULL, "Hello", "Hello World!", MB_OK);
+
+	// Unhook the function
+	pk32->currentmodule_iat_hook(HASH("user32.dll"), HASH("MessageBoxA"), (size_t)lpMsgBoxA);
+	
+	// Call the unhooked MessageBoxA
+	MessageBoxA(NULL, "Hello", "Hello World!", MB_OK);
+
 	return 0;
 }
