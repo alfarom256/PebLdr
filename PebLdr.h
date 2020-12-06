@@ -2,6 +2,7 @@
 #ifndef __PEB_LDR
 #define __PEB_LDR
 
+#include <Windows.h>
 #include <winnt.h>
 #include <winternl.h>
 #include "crc32.h"
@@ -12,6 +13,8 @@
 HMODULE getK32();
 
 typedef struct _peb_ldr {
+	// Get the current module's base address
+	HMODULE current_proc;
 	HMODULE base;
 	void* p_eat_strtbl;
 	PDWORD p_eat_ptrtbl;
@@ -38,15 +41,18 @@ typedef struct _peb_ldr {
 	}
 
 	/*
-		Passing NULL as the dll name signifies you're walking the export table 
-		of Kernel32.dll
+	Passing NULL as the dll name signifies you're walking the export table
+	of Kernel32.dll
 	*/
-	_peb_ldr(const char* dll) : init(FALSE), base(NULL), p_eat_ptrtbl(NULL), p_eat_strtbl(NULL){
-		
+	_peb_ldr(const char* dll) : init(FALSE), base(NULL), p_eat_ptrtbl(NULL), p_eat_strtbl(NULL) {
+		current_proc = GetModuleHandleA(NULL);
 		if (dll != NULL) {
-			this->base = LoadLibraryA(dll);
-			if (this->base == NULL)
-				return;
+			this->base = GetModuleHandleA(dll);
+			if (this->base == NULL) {
+				this->base = LoadLibraryA(dll);
+				if (this->base == NULL)
+					return;
+			}
 		}
 		else {
 			this->base = getK32();
@@ -78,19 +84,68 @@ typedef struct _peb_ldr {
 				DWORD fn_va = this->p_eat_ptrtbl[this->p_eat_ordtbl[i]];
 				void* fn = (void*)((size_t)this->base + (DWORD)fn_va);
 				return fn;
-			} 
+			}
 			string_tbl_iter = (void*)((unsigned char*)string_tbl_iter + sizeof(DWORD));
 		}
 		return NULL;
 	}
 
+	// returns the absolute address of the hooked function
+	void* currentmodule_iat_hook(DWORD lowercase_dllname_hash, DWORD function_hash, size_t absolute_dest_address) {
+		IMAGE_DOS_HEADER* ImgBase = (IMAGE_DOS_HEADER*)this->current_proc;
+		if (ImgBase->e_magic != IMAGE_DOS_SIGNATURE)
+			return FALSE;
+
+		IMAGE_NT_HEADERS* inth = (IMAGE_NT_HEADERS*)(ImgBase->e_lfanew + (size_t)this->current_proc);
+
+		PIMAGE_OPTIONAL_HEADER pImageOptHdr = &inth->OptionalHeader;
+		if ((pImageOptHdr->Magic ^ IMAGE_NT_OPTIONAL_HDR_MAGIC)) {
+			return FALSE;
+		}
+		IMAGE_IMPORT_DESCRIPTOR* importIter = (IMAGE_IMPORT_DESCRIPTOR*)(pImageOptHdr->DataDirectory[1].VirtualAddress + (size_t)this->current_proc);
+		while (importIter->Name != NULL) {
+			const char* pModString = (const char*)((size_t)this->current_proc + importIter->Name);
+			char* pModCpy = new(char[strlen(pModString) + 1]);
+			//pModCpy, pModString, strlen(pModString)
+			strncpy_s(pModCpy, strlen(pModString) + 1, pModString, strlen(pModString));
+			for (size_t i = 0; i < strlen(pModString); i++)
+			{
+				pModCpy[i] = tolower(pModCpy[i]);
+			}
+
+			if (HASH(pModCpy) != lowercase_dllname_hash) {
+				importIter++;
+				continue;
+			}
+			//printf("Found dll target : %s\n", pModCpy);
+
+			IMAGE_THUNK_DATA* imgThunk = (PIMAGE_THUNK_DATA)(importIter->FirstThunk + (size_t)this->current_proc);
+			IMAGE_THUNK_DATA* OriginalThunk = (PIMAGE_THUNK_DATA)(importIter->OriginalFirstThunk + (size_t)this->current_proc);
+
+			while (imgThunk->u1.Function != NULL) {
+				LPVOID func = (LPVOID)(imgThunk->u1.Function);
+				PIMAGE_IMPORT_BY_NAME pFname = (PIMAGE_IMPORT_BY_NAME)((size_t)this->current_proc + OriginalThunk->u1.AddressOfData);
+				if (HASH(pFname->Name) == function_hash) {
+
+					DWORD oldProtect, junk = 0;
+					VirtualProtect(&imgThunk->u1.Function, sizeof(size_t), PAGE_READWRITE, &oldProtect);
+					imgThunk->u1.Function = absolute_dest_address;
+					VirtualProtect(&imgThunk->u1.Function, sizeof(size_t), oldProtect, &junk);
+					return func;
+				}
+				OriginalThunk++;
+				imgThunk++;
+			}
+		}
+		return NULL;
+	}
 } _peb_ldr, *_ppeb_ldr;
 
 
 HMODULE getK32() {
 	HMODULE r;
 #ifdef _WIN64
-	PPEB _ppeb = (PPEB) __readgsqword(0x60);
+	PPEB _ppeb = (PPEB)__readgsqword(0x60);
 	r = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink->Flink->Flink + 0x20);
 #else
 	PPEB _ppeb = (PPEB)__readfsdword(0x30);
