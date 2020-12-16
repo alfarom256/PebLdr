@@ -45,7 +45,8 @@ typedef struct _peb_ldr {
 	of Kernel32.dll
 	*/
 	_peb_ldr(const char* dll) : init(FALSE), base(NULL), p_eat_ptrtbl(NULL), p_eat_strtbl(NULL) {
-		current_proc = GetModuleHandleA(NULL);
+		PPEB _ppeb = (PPEB)__readgsqword(0x60);
+		current_proc = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink + 0x20);
 		if (dll != NULL) {
 			this->base = GetModuleHandleA(dll);
 			if (this->base == NULL) {
@@ -90,7 +91,6 @@ typedef struct _peb_ldr {
 		return NULL;
 	}
 
-	// returns the absolute address of the hooked function
 	void* currentmodule_iat_hook(DWORD lowercase_dllname_hash, DWORD function_hash, size_t absolute_dest_address) {
 		IMAGE_DOS_HEADER* ImgBase = (IMAGE_DOS_HEADER*)this->current_proc;
 		if (ImgBase->e_magic != IMAGE_DOS_SIGNATURE)
@@ -139,19 +139,10 @@ typedef struct _peb_ldr {
 		}
 		return NULL;
 	}
+
+
 } _peb_ldr, *_ppeb_ldr;
 
 
-HMODULE getK32() {
-	HMODULE r;
-#ifdef _WIN64
-	PPEB _ppeb = (PPEB)__readgsqword(0x60);
-	r = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink->Flink->Flink + 0x20);
-#else
-	PPEB _ppeb = (PPEB)__readfsdword(0x30);
-	r = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink->Flink->Flink + 0x10);
-#endif
-	return r;
-}
 
 #endif

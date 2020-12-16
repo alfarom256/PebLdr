@@ -121,6 +121,7 @@
     <ClInclude Include="PebLdr.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="PebLdr.cpp" />
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
