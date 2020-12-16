@@ -45,8 +45,15 @@ typedef struct _peb_ldr {
 	of Kernel32.dll
 	*/
 	_peb_ldr(const char* dll) : init(FALSE), base(NULL), p_eat_ptrtbl(NULL), p_eat_strtbl(NULL) {
+
+#ifdef _WIN64
 		PPEB _ppeb = (PPEB)__readgsqword(0x60);
 		current_proc = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink + 0x20);
+#else
+		PPEB _ppeb = (PPEB)__readfsdword(0x30);
+		current_proc = *(HMODULE*)((unsigned char*)_ppeb->Ldr->InMemoryOrderModuleList.Flink + 0x10);
+#endif
+		
 		if (dll != NULL) {
 			this->base = GetModuleHandleA(dll);
 			if (this->base == NULL) {
